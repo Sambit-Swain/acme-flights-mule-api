@@ -1,0 +1,4 @@
+{
+  "secureProperties": ["key"],
+  "minMuleVersion": "4.3.0"
+}

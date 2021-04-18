@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	
+	<flow name="get:\search-flight\date:acme-flights-api-config">
+        <set-variable value='#[attributes.queryParams."departure-date"]' doc:name="Set Variable" doc:id="fcfc55c6-c48f-4c89-a115-19741fd0a948" variableName="departure-date"/>
+		<try doc:name="Try" doc:id="e9c5e4f3-c0ce-470e-aae1-7fdcf1e9b342" >
+			<db:select doc:name="Select" doc:id="b7e1cda6-6d22-400e-b94d-6e012001b718" config-ref="Database_Config">
+				<db:sql><![CDATA[SELECT Flight_Code AS "flight-code", 
+	   Airline_Name AS "airlines-name", 
+	   Departure_Airport AS "departure-airport", 
+	   Destination_Airport AS "destination-airport", 
+	   Departure_Date AS "departure-date", 
+	   Aircraft_Type AS "aircraft-type", 
+	   Seat_Availability AS "seats-available", 
+	   Price AS "price" 
+FROM airlines_sandbox.flights_SambitS 
+WHERE DATE_FORMAT(Departure_Date, '%Y-%m-%d') = :date]]></db:sql>
+				<db:input-parameters ><![CDATA[#[{
+	'date':vars."departure-date"
+}]]]></db:input-parameters>
+			
+</db:select>
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="3b18ddc2-c985-4c1d-a35e-0a104302278f" type="ANY">
+					<ee:transform doc:name="Transform Message" doc:id="9082d0ad-73ab-485e-8d4a-df749d3db6d2" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: error.errorType,
+		errorDescription: error.description
+	}
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="ERROR" doc:name="Logger" doc:id="3e0e6564-c64b-48c4-ae09-f7edf268fad5" message="#[payload]"/>
+				</on-error-propagate>
+			</error-handler>
+		</try>
+		<ee:transform doc:name="Transform Message" doc:id="3c831d36-f296-451e-9e28-c3cff8b31104" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+    </flow>
+    
+</mule>

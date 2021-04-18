@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	
+	<flow name="put:\allocate:application\json:acme-flights-api-config">
+        <set-variable value="#[payload]" doc:name="Payload" doc:id="eff13276-078e-4b02-b2aa-56fe6573d848" variableName="data"/>
+		<set-variable value='#[vars.data.price &gt; 0.00 and vars.data."seats-available" &gt; 0]' doc:name="Filter" doc:id="82942ea7-c29b-4358-96c8-f6530d0f6356" variableName="valid"/>
+		<choice doc:name="Valid Payload" doc:id="6db8c4b7-0302-4613-ba4c-b056da1033de" >
+			<when expression="#[vars.valid]">
+				<try doc:name="Try" doc:id="1b078851-5b88-4584-9f21-76a3adca0c5f">
+			<db:select doc:name="Select" doc:id="ab7d0738-18f7-4f38-8c4e-dd38960dcc81" config-ref="Database_Config">
+				<db:sql><![CDATA[SELECT COUNT(*) AS Records
+FROM airlines line JOIN routes routes 
+WHERE line.Airline_ID = routes.Airline_ID AND 
+	  routes.Source_Airport = :departure AND
+	  routes.Destination_Airport = :destination AND 
+      line.Active='Y' AND 
+      line.Name = :name]]></db:sql>
+				<db:input-parameters><![CDATA[#[{
+	'name':vars.data."airlines-name", 
+	'departure':vars.data."departure-airport", 
+	'destination':vars.data."destination-airport"
+}]]]></db:input-parameters>
+			</db:select>
+			<error-handler>
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="c93cb006-7274-45bb-abed-946c8c8dc3a7">
+					<ee:transform doc:name="Error Payload" doc:id="1a317da0-4ef2-4c8f-8084-409201b51536">
+						<ee:message>
+							<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: error.errorType,
+		errorDescription: error.description
+	}
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="ERROR" doc:name="Error payload" doc:id="6f347f7a-ed11-49cc-9c66-b081ab8e0635" message="#[payload]"/>
+				</on-error-propagate>
+			</error-handler>
+		</try>
+				<choice doc:name="Valid Record" doc:id="4c4768cd-3922-498c-a64b-072eb7e49494" >
+					<when expression="#[payload.Records[0] &gt; 0]">
+						<try doc:name="Try" doc:id="e27bde95-402f-465b-b2f8-b3096ac60dfb">
+			<db:insert doc:name="Insert" doc:id="c43b1d5f-d021-45f7-880e-7e5be0455d7f" config-ref="Database_Config">
+				<db:sql><![CDATA[INSERT INTO airlines_sandbox.flights_SambitS (Flight_Code, Airline_Name, Departure_Airport, Destination_Airport, Departure_Date, Aircraft_Type, Seat_Availability, Price) 
+VALUES (:code, :name, :departure, :destination, STR_TO_DATE(:date,'%Y-%m-%dT%h:%i:%sZ'), :type, :seats, :price)]]></db:sql>
+				<db:input-parameters><![CDATA[#[{
+	'code':vars.data."flight-code", 
+	'name':vars.data."airlines-name", 
+	'departure':vars.data."departure-airport", 
+	'destination':vars.data."destination-airport", 
+	'date':vars.data."departure-date", 
+	'type':vars.data."aircraft-type", 
+	'seats':vars.data."seats-available", 
+	'price':vars.data.price
+}]]]></db:input-parameters>
+			</db:insert>
+			<error-handler>
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="0e327f47-8a73-4a04-95af-dacb095919ba" type="ANY">
+					<ee:transform doc:name="Error Payload" doc:id="5776b6db-9a12-42e0-b6e7-0e943d25ad58">
+						<ee:message>
+							<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: error.errorType,
+		errorDescription: error.description
+	}
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="ERROR" doc:name="Error Payload" doc:id="570f094d-9c58-4071-a7b5-5f47749db97b" message="#[payload]" />
+				</on-error-propagate>
+			</error-handler>
+		</try>
+						<ee:transform doc:name="Success Response" doc:id="21d37f14-ab07-49c4-bfc3-a2010dc4c268">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: "success",
+	details: vars.data
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+					</when>
+					<otherwise >
+						<ee:transform doc:name="Error Payload" doc:id="94e68004-df33-4102-a17c-e56d52fc1327" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: "Invalid Input!!",
+		errorDescription: "Airlines Name, Departure Port and Destination Port is not a route."
+	}
+}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<set-variable value="#[500]" doc:name="Error Code" doc:id="c24efbd1-0800-4ca8-bbee-6d8ef17eba37" variableName="httpStatus"/>
+						<logger level="ERROR" doc:name="Error Payload" doc:id="41821dd7-b154-4ad7-b777-ff366a3fd28d" message="#[payload]"/>
+					</otherwise>
+				</choice>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Error Payload" doc:id="3eda530f-9994-4dad-a061-ee238971e9a8" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: "Invalid Input!!",
+		errorDescription: "Seats allocation and Price value is not allowed."
+	}
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<set-variable value="#[500]" doc:name="Error Code" doc:id="e6bc3012-678f-4c01-9ed5-512c9db0cd43" variableName="httpStatus"/>
+				<logger level="ERROR" doc:name="Error Payload" doc:id="8033ece7-20b7-4c3d-b3d5-a32c4c65b3dd" message="#[payload]"/>
+			</otherwise>
+		</choice>
+    </flow>
+    
+</mule>

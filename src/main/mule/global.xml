@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd 
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+	
+	<http:listener-config name="acme-flights-api-httpListenerConfig">
+        <http:listener-connection host="localhost" port="8082" />
+    </http:listener-config>
+    <apikit:config name="acme-flights-api-config" api="acme-flights-api.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
+	<global-property doc:name="Global Property" doc:id="37486426-0bb9-4505-b272-247935a51576" name="env" value="dev" />
+	<global-property doc:name="Global Property" doc:id="9d142a6f-91dc-4a2d-9ae7-ea8cdf654b90" name="key" value="5DzHLyvZawdse7QL" />
+	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="e4c99d72-b140-4d82-998a-626d9e424b6c" file="properties\/${env}-secured.properties" key="${key}" />
+	<configuration-properties doc:name="Configuration properties" doc:id="1f8123f9-d3bc-4dca-913c-5f9a96a836e8" file="properties\/${env}.properties" />
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="e4f692c5-4df5-4131-b8a4-b634628cd038" >
+		<db:my-sql-connection host="${db.host}" port="${db.port}" user="${secure::db.user}" password="${secure::db.pass}" database="${secure::db.name}" />
+	</db:config>
+	<os:config name="ObjectStore_Config" doc:name="ObjectStore Config" doc:id="7ed749b3-46d5-45a7-a761-032fcadd5a7b" />
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="628ddb19-40be-41fb-ae98-fd6375edf961" entryTtl="60" config-ref="ObjectStore_Config" />
+
+</mule>

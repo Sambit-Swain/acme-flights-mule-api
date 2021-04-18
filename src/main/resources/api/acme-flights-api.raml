@@ -1,0 +1,229 @@
+#%RAML 1.0
+title: ACME Flights API
+version: 1.0
+description: ACME Flights and Travel API Specification
+mediaType: 
+- application/json
+baseUri: /api/acme-flights
+protocols:
+  - HTTP
+
+types:
+  access-type:
+    enum:
+      - customer
+      - field-agent
+    description: Access type is allowed for customer and field-agent
+  flight-journey:
+    type: object
+    properties:
+      flight-code:
+        type: string
+        pattern: ^([A-Z0-9]{2,})$
+        example: FR3883
+      airlines-name:
+        type: string
+        example: British Airways
+      departure-airport:
+        type: string
+        pattern: ^(([A-Z]{3})|(\\N))$
+        example: MAN
+      destination-airport:
+        type: string
+        pattern: ^(([A-Z]{3})|(\\N))$
+        example: LHR
+      departure-date:
+        type: datetime
+        example: 2021-03-15T00:00:00Z
+      aircraft-type:
+        type: string
+        description: Type of flight
+        example: Airbus A313
+      seats-available:
+        type: number
+        format: int
+        example: 160
+      price: 
+        type: number
+        format: double
+        description: Price of the selected travel
+        example: 625.30
+
+/search-flight:
+  get:
+    responses:
+      200:
+        body:
+          application/json:
+            type: array
+            items:
+              type: flight-journey
+  /date:
+    get:
+      headers: 
+        access: access-type
+      queryParameters:
+        departure-date:
+          type: string
+          pattern: ^202([1-9])\-(0?[1-9]|1[012])\-(0?[1-9]|[12][0-9]|3[01])$
+          example: 2021-03-15
+      responses:
+        200:
+          body:
+            application/json:
+              type: array
+              items:
+                type: flight-journey
+        
+  /flight:
+    get:
+      headers: 
+        access: access-type
+      queryParameters:
+        offset:
+          type: number
+          format: int16
+          example: 1
+        airlines-name:
+          type: string
+          example: British Airways
+      responses:
+        200:
+          body:
+            application/json:
+              type: array
+              items:
+                properties:
+                  destination: 
+                    type: object
+                    properties:
+                      country: 
+                        type: string
+                        example: Ireland
+                      city: 
+                        type: string
+                        example: Dublin
+                      airport-name: 
+                        type: string
+                        example: Dublin Airport
+  
+/ticket-purchase:
+  post:
+    headers: 
+      access: access-type
+    body:
+      application/json:
+        type: object
+        properties:
+          flight-code:
+            type: string
+            pattern: ^([A-Z0-9]{2,})$
+            example: FR3883
+          airlines-name:
+            type: string
+            example: British Airways
+          departure-airport:
+            type: string
+            pattern: ^(([A-Z]{3})|(\\N))$
+            example: MAN
+          destination-airport:
+            type: string
+            pattern: ^(([A-Z]{3})|(\\N))$
+            example: LHR
+          departure-date:
+            type: string
+            pattern: ^202([1-9])\-(0?[1-9]|1[012])\-(0?[1-9]|[12][0-9]|3[01])$
+            example: 2021-03-15
+          price: 
+            type: number
+            format: double
+            description: Price of the selected travel
+            example: 625.30
+    responses:
+      200:
+        body:
+          application/json:
+            type: object
+            properties:
+              status: 
+                enum:
+                  - success
+                  - failure
+              cause:
+                type: string
+                description: Detailed description of error occured for this API call
+                required: false
+              details:
+                type: flight-journey
+                required: false
+
+/allocate:
+  put:
+    headers: 
+      access: 
+        enum:
+          - field-agent
+        description: Access type should be for internal agent only
+    body:
+      application/json:
+        type: flight-journey
+    responses:
+      200:
+        body:
+          application/json:
+            type: object
+            properties:
+              status: 
+                enum:
+                  - success
+                  - failure
+              cause:
+                type: string
+                description: Detailed description of error occured for this API call
+                required: false
+              details:
+                type: flight-journey
+                required: false
+              
+/amend-price:
+  post:
+    headers: 
+      access: 
+        enum:
+          - field-agent
+        description: Access type should be for internal agent only
+    queryParameters:
+      new-price:
+        type: number
+        format: double
+        description: Price of the selected travel
+        example: 900.00
+    body:
+      application/json:
+        type: flight-journey
+    responses:
+      200:
+        body:
+          application/json:
+            type: object
+            properties:
+              status: 
+                enum:
+                  - success
+                  - failure
+              cause:
+                type: string
+                description: Detailed description of error occured for this API call
+                required: false
+              details:
+                type: flight-journey
+                required: false
+
+/health-check:
+  get:
+    responses:
+      200:
+        body:
+          application/json:
+            example:
+              {status: "success"}

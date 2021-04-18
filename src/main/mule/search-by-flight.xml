@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+	
+	<flow name="get:\search-flight\flight:acme-flights-api-config">
+        <set-variable value='#[attributes.queryParams."airlines-name"]' doc:name="Airlines Name" doc:id="1ad641dc-7c01-4237-a15e-06cc24934aa0" variableName="airlines-name"/>
+		<set-variable value="#[attributes.queryParams.offset as Number]" doc:name="Offset" doc:id="77432bb6-5dba-45a0-8e21-2ab0bbf946fd" variableName="offset" />
+		<try doc:name="Try" doc:id="7e338375-750c-48d0-ad5b-9daf73a5159c" >
+			<os:retrieve doc:name="Retrieve" doc:id="d469223c-f135-439e-88cf-a6d4e1534d45" key='#[vars."airlines-name"]' objectStore="Object_store">
+		</os:retrieve>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="2f2bd383-faad-4020-8258-d6f429acc762" type="ANY">
+					<set-payload value="#[null]" doc:name="Set Payload" doc:id="14d12ee5-3655-4640-b5ad-6ec0f14cf243" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+		<choice doc:name="Check Cache" doc:id="39266d08-0731-4bd8-aa5d-63373bdaec1b" >
+			<when expression="#[payload == null]">
+				<set-variable value="#[null]" doc:name="Result = null" doc:id="c26ebc38-1d26-41a8-8624-5c0e9c1a052e" variableName="result" />
+				<try doc:name="Try" doc:id="e6e970bb-7d77-43b6-9677-028d9a4403ca">
+			<db:select doc:name="Select" doc:id="00d19361-c118-4109-9039-316665b9e27d" config-ref="Database_Config">
+				<db:sql><![CDATA[SELECT port.Country AS country, port.City AS city, port.Name AS "airport-name" 
+FROM (SELECT DISTINCT routes.Destination_Airport_ID AS id 
+	  FROM airlines line JOIN routes routes 
+	  WHERE line.Airline_ID = routes.Airline_ID AND 
+      		line.Active='Y' AND 
+      		line.Name = :name) AS temp JOIN airports AS port
+WHERE port.Airport_ID = temp.id]]></db:sql>
+				<db:input-parameters><![CDATA[#[{
+	'name':vars."airlines-name"
+}]]]></db:input-parameters>
+			
+</db:select>
+			<error-handler>
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="f89d200b-4346-420b-afdb-543d5b0e2643" type="ANY">
+					<ee:transform doc:name="Error payload" doc:id="8fad04fd-ea4e-455a-8065-2e94e92f590a">
+						<ee:message>
+							<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: error.errorType,
+		errorDescription: error.description
+	}
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="ERROR" doc:name="Error Payload" doc:id="649fd473-e86d-4ff6-9e55-bf21c0433dac" message="#[payload]" />
+				</on-error-propagate>
+			</error-handler>
+		</try>
+				<choice doc:name="Choice" doc:id="8ba8fb8e-2117-42e2-9bc9-f3fb70a6de9f">
+					<when expression="#[sizeOf(payload) &gt; 0]" >
+						<foreach doc:name="For Each" doc:id="c8b1d782-7d11-4904-a305-428191789f7a" collection="#[payload]" batchSize="10">
+					<ee:transform doc:name="Transform Message" doc:id="4731065b-49fa-4d7a-9d78-dda7ebfc5e48">
+						<ee:message>
+							<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	value: payload
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<set-variable value="#[flatten((vars.result default []) ++ [payload])]" doc:name="Result" doc:id="00bcd45e-a717-4925-b307-931e0e7d2e8b" variableName="result" />
+				</foreach>
+						<os:store doc:name="Store" doc:id="310952ef-4a0d-45ec-9942-c9769f424b92" objectStore="Object_store" key='#[vars."airlines-name"]'>
+					<os:value><![CDATA[#[vars.result]]]></os:value>
+				</os:store>
+						<set-payload value="#[vars.result[0].value]" doc:name="First Page" doc:id="511413fc-b8d8-4443-82d5-a9dbad819c0e" />
+					</when>
+					<otherwise >
+						<ee:transform doc:name="Error Payload" doc:id="81c5b030-c223-4d22-9cd8-47d0012f8e7e" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: "Invalid Input!!",
+		errorDescription: vars."airlines-name" ++ " is unavailable"
+	}
+}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<set-variable value="#[500]" doc:name="Error Code" doc:id="f99c6cbe-11cd-4d46-9b25-b1407b9ef3a4" variableName="httpStatus"/>
+						<logger level="ERROR" doc:name="Error payload" doc:id="20416aad-59aa-4e79-a1ec-435f0502d9b8" message="#[payload]"/>
+					</otherwise>
+				</choice>
+			</when>
+			<otherwise >
+				<set-variable value="#[sizeOf(payload default []) default 0 as Number]" doc:name="Offset Limit" doc:id="db37e9fa-b4b9-4f03-9a84-0150d93734f7" variableName="offsetLimit"/>
+				<choice doc:name="Offset Limit" doc:id="b4a9bb06-e619-4dab-8a35-9eefcd9e759a" >
+					<when expression="#[vars.offsetLimit &gt;= vars.offset]">
+						<ee:transform doc:name="Transform Message" doc:id="58e0d733-0a51-42c2-9521-7892df52d38e">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload[vars.offset - 1].value default {result: 'empty or invalid'}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+					</when>
+					<otherwise >
+						<ee:transform doc:name="Transform Message" doc:id="416e257f-0652-4a53-988b-da800b11f978" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload[vars.offsetLimit - 1].value default {result: 'empty or invalid'}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+					</otherwise>
+				</choice>
+			</otherwise>
+		</choice>
+    </flow>
+    
+</mule>

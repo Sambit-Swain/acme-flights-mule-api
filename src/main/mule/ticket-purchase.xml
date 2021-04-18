@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	
+	<flow name="post:\ticket-purchase:application\json:acme-flights-api-config">
+        <set-variable value="#[payload]" doc:name="Payload" doc:id="4f9c4038-7bfc-4a1f-93a7-7bcbd1e52ec5" variableName="data"/>
+		<try doc:name="Try" doc:id="5480d28e-95d6-474a-b571-c0073c92da6f" >
+			<db:select doc:name="Select" doc:id="a4ad99f4-47ef-44c4-8c0c-467c48b0f455" config-ref="Database_Config">
+				<db:sql><![CDATA[SELECT Seat_Availability FROM airlines_sandbox.flights_SambitS 
+WHERE Flight_Code = :code AND 
+	  Airline_Name = :name AND 
+	  Departure_Airport = :departure AND 
+	  Destination_Airport = :destination AND 
+	  DATE_FORMAT(Departure_Date, '%Y-%m-%d') = :date AND 
+	  Price = :price AND
+	  Seat_Availability > 0]]></db:sql>
+				<db:input-parameters ><![CDATA[#[{
+	'code':vars.data."flight-code", 
+	'name':vars.data."airlines-name", 
+	'departure':vars.data."departure-airport", 
+	'destination':vars.data."destination-airport", 
+	'date':vars.data."departure-date", 
+	'price':vars.data.price
+}]]]></db:input-parameters>
+			
+</db:select>
+			<choice doc:name="Valid Payload" doc:id="5101af65-6538-420b-b314-e49d543b8b43" >
+				<when expression="#[payload.Seat_Availability[0] != null]">
+					<db:update doc:name="Update" doc:id="73ba3583-8f0a-4a5e-a7fc-0b9e2815c263" config-ref="Database_Config">
+				<db:sql><![CDATA[UPDATE flights_SambitS SET Seat_Availability = :count-1 
+WHERE Flight_Code = :code AND 
+	  Airline_Name = :name AND 
+	  Departure_Airport = :departure AND 
+	  Destination_Airport = :destination AND 
+	  DATE_FORMAT(Departure_Date, '%Y-%m-%d') = :date AND 
+	  Seat_Availability = :count AND
+	  Price = :price]]></db:sql>
+				<db:input-parameters><![CDATA[#[{
+	'code':vars.data."flight-code", 
+	'name':vars.data."airlines-name", 
+	'departure':vars.data."departure-airport", 
+	'destination':vars.data."destination-airport", 
+	'date':vars.data."departure-date", 
+	'count':payload.Seat_Availability[0], 
+	'price':vars.data.price
+}]]]></db:input-parameters>
+			</db:update>
+					<choice doc:name="Choice" doc:id="353c8d87-1506-4cee-a08d-06d4ddb8f5f3">
+						<when expression="#[payload.affectedRows &gt; 0]">
+							<db:select doc:name="Select" doc:id="f4d00566-7507-4e7b-9990-e0f14725a0b7" config-ref="Database_Config">
+				<db:sql><![CDATA[SELECT * FROM airlines_sandbox.flights_SambitS 
+WHERE Flight_Code = :code AND 
+	  Airline_Name = :name AND 
+	  Departure_Airport = :departure AND 
+	  Destination_Airport = :destination AND 
+	  DATE_FORMAT(Departure_Date, '%Y-%m-%d') = :date AND 
+	  Price = :price]]></db:sql>
+				<db:input-parameters><![CDATA[#[{
+	'code':vars.data."flight-code", 
+	'name':vars.data."airlines-name", 
+	'departure':vars.data."departure-airport", 
+	'destination':vars.data."destination-airport", 
+	'date':vars.data."departure-date", 
+	'price':vars.data.price
+}]]]></db:input-parameters>
+			</db:select>
+							<ee:transform doc:name="Success Response" doc:id="94cf954e-2e95-4957-93d5-0d27080e3000">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: "success",
+	details: payload[0]
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+						</when>
+						<otherwise >
+							<ee:transform doc:name="Error Payload" doc:id="923e9635-3a27-4d78-ac9f-59df80151dc4" >
+								<ee:message >
+									<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: "DB Update!!",
+		errorDescription: "No records were updated based on search criteria."
+	}
+}]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+							<logger level="ERROR" doc:name="Error Payload" doc:id="7718e039-3b8d-4a2a-8d6e-8c651139134e" message="#[payload]"/>
+							<set-variable value="#[500]" doc:name="Error Code" doc:id="a4a1b394-8c37-4c65-8b8d-a925f264a08e" variableName="httpStatus"/>
+						</otherwise>
+					</choice>
+				</when>
+				<otherwise >
+					<ee:transform doc:name="Error Payload" doc:id="ed565af6-b528-4c84-94bc-a29925c2253c" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: "Invalid Input!!",
+		errorDescription: "Request data does not find valid DB record for ticket purchase."
+	}
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="ERROR" doc:name="Error Payload" doc:id="f314d825-270e-4541-bb72-0e7a89fc6121" message="#[payload]"/>
+					<set-variable value="#[500]" doc:name="Error Code" doc:id="d65c9802-b14d-41c2-85c2-658d6dc9123a" variableName="httpStatus"/>
+				</otherwise>
+			</choice>
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="aa060a10-4a31-4601-8b45-d76d45ba094f" type="ANY">
+					<ee:transform doc:name="Error Payload" doc:id="1b3f89cf-24ad-4e71-b4e2-219761492ae2" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: error.errorType,
+		errorDescription: error.description
+	}
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="ERROR" doc:name="Error Payload" doc:id="5b606b0b-71de-4609-a15a-9e67a7f4c86f" message="#[payload]"/>
+				
+</on-error-propagate>
+			</error-handler>
+		</try>
+    
+</flow>
+    
+</mule>

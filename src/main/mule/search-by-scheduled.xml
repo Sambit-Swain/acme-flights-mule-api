@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	
+	<flow name="get:\search-flight:acme-flights-api-config">
+		<try doc:name="Try" doc:id="4834716d-43dc-4598-85f5-34e0c2979030" >
+			<db:select doc:name="Select" doc:id="67eb5ad0-8817-4a6f-86e6-ae01c2e58ce5" config-ref="Database_Config">
+				<db:sql><![CDATA[SELECT * FROM airlines_sandbox.flights_SambitS]]></db:sql>
+			</db:select>
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="a88f24fd-8df5-4380-84cb-5d5409afd7ec" type="ANY">
+					<ee:transform doc:name="Transform Message" doc:id="ccf4e23f-80c9-4f35-b895-93f2f2457d01" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: 'failure',
+	cause: {
+		errorType: error.errorType,
+		errorDescription: error.description
+	}
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="ERROR" doc:name="Logger" doc:id="65f86367-7e01-4475-9b02-5a68d4767f56" message="#[payload]"/>
+				</on-error-propagate>
+			</error-handler>
+		</try>
+		<ee:transform doc:name="Transform Message" doc:id="95f71993-2f68-4113-a082-35ea010aa2da" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+    </flow>
+</mule>
